@@ -12,7 +12,18 @@ from app.core.auth import CurrentUser
 from app.core.database import get_pool, transaction
 from app.core.http import not_found, unprocessable
 from app.schemas.knowledge import KnowledgeSourceResponse
-from app.services.file_preview import csv_preview, docx_preview, pptx_preview, xlsx_preview
+from app.services.file_preview import (
+    csv_preview,
+    docx_preview,
+    email_preview,
+    epub_preview,
+    html_preview,
+    opendocument_preview,
+    pptx_preview,
+    rtf_preview,
+    xml_preview,
+    xlsx_preview,
+)
 from app.services.url_fetch import MAX_URL_BYTES, fetch_url_source
 
 
@@ -22,12 +33,28 @@ MAX_TEXT_BYTES = 2 * 1024 * 1024
 MAX_CSV_BYTES = 5 * 1024 * 1024
 MAX_OFFICE_BYTES = 20 * 1024 * 1024
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
+MAX_VIDEO_BYTES = 100 * 1024 * 1024
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_STRUCTURED_BYTES = 5 * 1024 * 1024
+MAX_CODE_BYTES = 2 * 1024 * 1024
+MAX_EPUB_BYTES = 25 * 1024 * 1024
 PREVIEW_CHARS = 4000
-MARKDOWN_CONTENT_TYPES = {"text/markdown", "text/plain"}
+MARKDOWN_CONTENT_TYPES = {"text/markdown", "text/x-markdown"}
 PDF_CONTENT_TYPES = {"application/pdf", "application/octet-stream"}
 TEXT_CONTENT_TYPES = {"text/plain"}
 CSV_CONTENT_TYPES = {"text/csv", "application/csv", "application/vnd.ms-excel"}
+JSON_CONTENT_TYPES = {"application/json", "application/x-json", "application/jsonl", "application/x-ndjson"}
+YAML_CONTENT_TYPES = {"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"}
+XML_CONTENT_TYPES = {"application/xml", "text/xml"}
+HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+RTF_CONTENT_TYPES = {"application/rtf", "text/rtf"}
+EMAIL_CONTENT_TYPES = {"message/rfc822", "application/eml"}
+OPENDOCUMENT_CONTENT_TYPES = {
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/vnd.oasis.opendocument.presentation",
+}
+EPUB_CONTENT_TYPES = {"application/epub+zip"}
 WORD_CONTENT_TYPES = {
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -48,9 +75,43 @@ AUDIO_CONTENT_TYPES = {
     "audio/wav",
     "audio/x-wav",
     "audio/webm",
+}
+VIDEO_CONTENT_TYPES = {
     "video/mp4",
+    "video/mpeg",
+    "video/webm",
+    "application/mp4",
 }
 IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+CODE_EXTENSIONS = {
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".java",
+    ".go",
+    ".rs",
+    ".c",
+    ".cc",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".cs",
+    ".rb",
+    ".php",
+    ".swift",
+    ".kt",
+    ".kts",
+    ".scala",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".sql",
+    ".css",
+    ".scss",
+    ".less",
+}
 
 
 @dataclass(frozen=True)
@@ -64,12 +125,22 @@ class FileKind:
 FILE_KINDS = {
     "markdown": FileKind("markdown", MAX_MARKDOWN_BYTES, {".md", ".markdown"}, MARKDOWN_CONTENT_TYPES),
     "pdf": FileKind("pdf", MAX_PDF_BYTES, {".pdf"}, PDF_CONTENT_TYPES),
-    "text": FileKind("text", MAX_TEXT_BYTES, {".txt", ".log"}, TEXT_CONTENT_TYPES),
+    "text": FileKind("text", MAX_TEXT_BYTES, {".txt", ".log", ".rst", ".tex"}, TEXT_CONTENT_TYPES),
     "csv": FileKind("csv", MAX_CSV_BYTES, {".csv", ".tsv"}, CSV_CONTENT_TYPES),
+    "json": FileKind("json", MAX_STRUCTURED_BYTES, {".json", ".jsonl", ".ndjson"}, JSON_CONTENT_TYPES),
+    "yaml": FileKind("yaml", MAX_STRUCTURED_BYTES, {".yaml", ".yml"}, YAML_CONTENT_TYPES),
+    "xml": FileKind("xml", MAX_STRUCTURED_BYTES, {".xml"}, XML_CONTENT_TYPES),
+    "html": FileKind("html", MAX_STRUCTURED_BYTES, {".html", ".htm", ".xhtml"}, HTML_CONTENT_TYPES),
+    "rtf": FileKind("rtf", MAX_TEXT_BYTES, {".rtf"}, RTF_CONTENT_TYPES),
+    "email": FileKind("email", MAX_TEXT_BYTES, {".eml"}, EMAIL_CONTENT_TYPES),
+    "code": FileKind("code", MAX_CODE_BYTES, CODE_EXTENSIONS, set()),
     "word": FileKind("word", MAX_OFFICE_BYTES, {".doc", ".docx"}, WORD_CONTENT_TYPES),
     "excel": FileKind("excel", MAX_OFFICE_BYTES, {".xls", ".xlsx"}, EXCEL_CONTENT_TYPES),
     "powerpoint": FileKind("powerpoint", MAX_OFFICE_BYTES, {".ppt", ".pptx"}, POWERPOINT_CONTENT_TYPES),
-    "audio": FileKind("audio", MAX_AUDIO_BYTES, {".mp3", ".m4a", ".wav", ".webm", ".mp4"}, AUDIO_CONTENT_TYPES),
+    "opendocument": FileKind("opendocument", MAX_OFFICE_BYTES, {".odt", ".ods", ".odp"}, OPENDOCUMENT_CONTENT_TYPES),
+    "epub": FileKind("epub", MAX_EPUB_BYTES, {".epub"}, EPUB_CONTENT_TYPES),
+    "video": FileKind("video", MAX_VIDEO_BYTES, {".mp4", ".mpeg", ".mpg", ".webm", ".m4v"}, VIDEO_CONTENT_TYPES),
+    "audio": FileKind("audio", MAX_AUDIO_BYTES, {".mp3", ".m4a", ".wav", ".ogg", ".oga", ".flac", ".mpga"}, AUDIO_CONTENT_TYPES),
     "image": FileKind("image", MAX_IMAGE_BYTES, {".png", ".jpg", ".jpeg", ".webp", ".gif"}, IMAGE_CONTENT_TYPES),
 }
 
@@ -238,6 +309,27 @@ async def create_file_source(
         preview = csv_preview(data, PREVIEW_CHARS)
         upload_filename = filename
         upload_data = data
+    elif kind.source_type in {"json", "yaml", "code"}:
+        label = kind.source_type.upper() if kind.source_type != "code" else "Code source"
+        preview = _require_utf8(data, label)[:PREVIEW_CHARS]
+        upload_filename = filename
+        upload_data = data
+    elif kind.source_type == "xml":
+        preview = xml_preview(data, PREVIEW_CHARS)
+        upload_filename = filename
+        upload_data = data
+    elif kind.source_type == "html":
+        preview = html_preview(data, PREVIEW_CHARS)
+        upload_filename = f"{Path(filename).stem or 'html'}-visible-text.txt"
+        upload_data = preview.encode("utf-8")
+    elif kind.source_type == "rtf":
+        preview = rtf_preview(data, PREVIEW_CHARS)
+        upload_filename = f"{Path(filename).stem or 'rtf'}-text.txt"
+        upload_data = preview.encode("utf-8")
+    elif kind.source_type == "email":
+        preview = email_preview(data, PREVIEW_CHARS)
+        upload_filename = f"{Path(filename).stem or 'email'}-email.txt"
+        upload_data = preview.encode("utf-8")
     elif kind.source_type == "word":
         preview = docx_preview(data, PREVIEW_CHARS) if suffix == ".docx" else None
         upload_filename = filename
@@ -250,10 +342,23 @@ async def create_file_source(
         preview = pptx_preview(data, PREVIEW_CHARS) if suffix == ".pptx" else None
         upload_filename = filename
         upload_data = data
+    elif kind.source_type == "opendocument":
+        preview = opendocument_preview(data, PREVIEW_CHARS)
+        upload_filename = f"{Path(filename).stem or 'opendocument'}-text.txt" if preview else filename
+        upload_data = preview.encode("utf-8") if preview else data
+    elif kind.source_type == "epub":
+        preview = epub_preview(data, PREVIEW_CHARS)
+        upload_filename = f"{Path(filename).stem or 'epub'}-text.txt" if preview else filename
+        upload_data = preview.encode("utf-8") if preview else data
     elif kind.source_type == "audio":
         transcript = await openai.transcribe_audio(filename=filename, data=data)
         preview = transcript[:PREVIEW_CHARS]
         upload_filename = f"{Path(filename).stem or 'audio'}-transcript.txt"
+        upload_data = transcript.encode("utf-8")
+    elif kind.source_type == "video":
+        transcript = await openai.transcribe_audio(filename=filename, data=data)
+        preview = transcript[:PREVIEW_CHARS]
+        upload_filename = f"{Path(filename).stem or 'video'}-video-transcript.txt"
         upload_data = transcript.encode("utf-8")
     elif kind.source_type == "image":
         description = await openai.describe_image(filename=filename, content_type=content_type, data=data)
@@ -439,7 +544,10 @@ def _classify_file(*, filename: str, content_type: str | None) -> FileKind:
     suffix = Path(filename).suffix.lower()
     base_content_type = _base_content_type(content_type)
     for kind in FILE_KINDS.values():
-        if suffix in kind.extensions or base_content_type in kind.content_types:
+        if base_content_type in kind.content_types:
+            return kind
+    for kind in FILE_KINDS.values():
+        if suffix in kind.extensions:
             return kind
     raise unprocessable("Unsupported file type")
 

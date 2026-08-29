@@ -4,7 +4,14 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.agents_runtime.openai_adapter import OpenAIAdapter, get_openai_adapter
 from app.core.auth import CurrentUser, get_current_user
-from app.schemas.agents import AgentCreate, AgentResponse, AgentRunRequest, AgentRunResponse
+from app.schemas.agents import (
+    AgentCreate,
+    AgentDesignPreviewRequest,
+    AgentDesignPreviewResponse,
+    AgentResponse,
+    AgentRunRequest,
+    AgentRunResponse,
+)
 from app.services import agents as agent_service
 
 
@@ -28,12 +35,27 @@ async def list_agents(
     return await agent_service.list_agents(user=user, limit=limit)
 
 
+@router.post("/design-preview", response_model=AgentDesignPreviewResponse)
+async def preview_agent_design_from_draft(
+    body: AgentDesignPreviewRequest,
+) -> AgentDesignPreviewResponse:
+    return await agent_service.preview_agent_design_from_draft(body=body)
+
+
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: UUID,
     user: CurrentUser = Depends(get_current_user),
 ) -> AgentResponse:
     return await agent_service.get_agent(user=user, agent_id=agent_id)
+
+
+@router.get("/{agent_id}/design-preview", response_model=AgentDesignPreviewResponse)
+async def preview_agent_design(
+    agent_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> AgentDesignPreviewResponse:
+    return await agent_service.preview_agent_design(user=user, agent_id=agent_id)
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -6,8 +6,9 @@ Agent-scoped RAG knowledge base backend slice for the OpenFDE hackathon scaffold
 
 - One logged-in seeded user can create agents.
 - Each agent owns exactly one OpenAI Vector Store.
-- Markdown, PDF, HTTPS URL, text, CSV, Word, Excel, PowerPoint, audio, and image sources can be attached to one agent.
+- Markdown, PDF, HTTPS URL, text, CSV/TSV, JSON/YAML/XML, HTML/RTF, Email, code files, Word, Excel, PowerPoint, OpenDocument, EPUB, audio, video, and image sources can be attached to one agent.
 - Agent runs use `FileSearchTool` with only that agent's vector store.
+- Agent designs can be previewed before FDE handoff with a structured summary and Mermaid tool-calling graph.
 - PostgreSQL stores metadata only. It does not store embeddings, chunks, or vectors.
 
 ## Not In This Slice
@@ -61,12 +62,15 @@ Then open `http://localhost:8765/demo.html`. The page starts in Browser Demo mod
 
 Supported file upload formats in Live API mode:
 
-- Text: `.md`, `.markdown`, `.txt`, `.log`, `.csv`, `.tsv`
-- Documents: `.pdf`, `.doc`, `.docx`, `.xls`, `.xlsx`, `.ppt`, `.pptx`
+- Text: `.md`, `.markdown`, `.txt`, `.log`, `.rst`, `.tex`
+- Data: `.csv`, `.tsv`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.xml`
+- Web/email/code: `.html`, `.htm`, `.xhtml`, `.rtf`, `.eml`, common source-code extensions
+- Documents: `.pdf`, `.doc`, `.docx`, `.xls`, `.xlsx`, `.ppt`, `.pptx`, `.odt`, `.ods`, `.odp`, `.epub`
 - Audio: `.mp3`, `.m4a`, `.wav`, `.webm`, `.mp4`
+- Video: `.mp4`, `.mpeg`, `.mpg`, `.webm`, `.m4v`
 - Images: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`
 
-For audio, the backend transcribes the file and uploads the transcript to the agent's vector store. For images, it asks the model for readable text and a concise visual description, then uploads that text to the vector store.
+For audio, the backend transcribes the file and uploads the transcript to the agent's vector store. For video, the backend transcribes the audio track and uploads that transcript; it does not yet analyze video frames. For images, it asks the model for readable text and a concise visual description, then uploads that text to the vector store. HTML, RTF, email, EPUB, and OpenDocument files are converted to cleaner text when possible before indexing.
 
 ## Dummy Auth
 
@@ -106,6 +110,26 @@ curl -s http://localhost:8000/v1/agents/$AGENT_ID/knowledge-sources/files \
   -F "file=@deck.pptx"
 ```
 
+Preview a draft agent design before creating it:
+
+```bash
+curl -s http://localhost:8000/v1/agents/design-preview \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Due Diligence Agent",
+    "goal": "Answer questions from uploaded deal files.",
+    "source_types": ["pdf", "excel", "audio", "image"],
+    "enabled_tools": ["file_search"]
+  }'
+```
+
+Preview an existing agent design and tool-calling graph:
+
+```bash
+curl -s http://localhost:8000/v1/agents/$AGENT_ID/design-preview \
+  -H "Authorization: Bearer user-a"
+```
+
 Run the agent:
 
 ```bash
@@ -121,4 +145,4 @@ curl -s http://localhost:8000/v1/agents/$AGENT_ID/run \
 pytest
 ```
 
-The tests cover Markdown ingest, generic file ingest, audio/image text conversion paths, owner isolation, bad file type handling, URL SSRF validation, PDF validation, deletion cleanup, and OpenAPI route presence.
+The tests cover Markdown ingest, generic file ingest, audio/image text conversion paths, expanded structured/web file types, design preview graph generation, owner isolation, bad file type handling, URL SSRF validation, PDF validation, deletion cleanup, and OpenAPI route presence.

@@ -28,8 +28,9 @@ CREATE TABLE IF NOT EXISTS knowledge_sources (
     created_by_user_id UUID NOT NULL REFERENCES users(id),
     source_type TEXT NOT NULL CONSTRAINT knowledge_sources_source_type_check
         CHECK (source_type IN (
-            'markdown', 'pdf', 'url', 'text', 'csv', 'word', 'excel',
-            'powerpoint', 'audio', 'image'
+            'markdown', 'pdf', 'url', 'text', 'csv', 'json', 'yaml',
+            'xml', 'html', 'rtf', 'email', 'code', 'word', 'excel',
+            'powerpoint', 'opendocument', 'epub', 'audio', 'video', 'image'
         )),
     status TEXT NOT NULL CHECK (status IN ('ready', 'failed')),
     title TEXT NOT NULL,

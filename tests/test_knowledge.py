@@ -200,3 +200,58 @@ async def test_generic_image_file_describes_then_uploads_text(monkeypatch, fake_
     assert source.content_preview == "image text and visual description"
     assert fake_openai.described_images == ["whiteboard.png"]
     assert fake_openai.uploaded[0] == ("whiteboard-description.txt", b"image text and visual description")
+
+
+@pytest.mark.asyncio
+async def test_generic_video_file_transcribes_then_uploads_text(monkeypatch, fake_openai):
+    pool = FakePool()
+    monkeypatch.setattr(knowledge, "get_pool", lambda: pool)
+
+    source = await knowledge.create_file_source(
+        user=USER_A,
+        agent_id=AGENT_ID,
+        file=upload_file("walkthrough.mp4", "video/mp4", b"video bytes"),
+        title=None,
+        openai=fake_openai,
+    )
+
+    assert source.source_type == "video"
+    assert source.byte_size == len(b"video bytes")
+    assert source.content_preview == "transcribed meeting notes"
+    assert fake_openai.transcribed == ["walkthrough.mp4"]
+    assert fake_openai.uploaded[0] == ("walkthrough-video-transcript.txt", b"transcribed meeting notes")
+
+
+@pytest.mark.asyncio
+async def test_generic_json_file_ingest(monkeypatch, fake_openai):
+    pool = FakePool()
+    monkeypatch.setattr(knowledge, "get_pool", lambda: pool)
+
+    source = await knowledge.create_file_source(
+        user=USER_A,
+        agent_id=AGENT_ID,
+        file=upload_file("config.json", "application/json", b'{"agent":"ray"}'),
+        title=None,
+        openai=fake_openai,
+    )
+
+    assert source.source_type == "json"
+    assert "ray" in source.content_preview
+
+
+@pytest.mark.asyncio
+async def test_generic_html_file_uploads_visible_text(monkeypatch, fake_openai):
+    pool = FakePool()
+    monkeypatch.setattr(knowledge, "get_pool", lambda: pool)
+
+    source = await knowledge.create_file_source(
+        user=USER_A,
+        agent_id=AGENT_ID,
+        file=upload_file("page.html", "text/html", b"<html><script>bad()</script><body>Hello FDE</body></html>"),
+        title=None,
+        openai=fake_openai,
+    )
+
+    assert source.source_type == "html"
+    assert source.content_preview == "Hello FDE"
+    assert fake_openai.uploaded[0] == ("page-visible-text.txt", b"Hello FDE")

@@ -300,6 +300,34 @@
       color: #273449;
     }
 
+    .graph-box {
+      min-height: 220px;
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #dbeafe;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre;
+    }
+
+    .tool-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tool-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      gap: 3px;
+    }
+
     .empty {
       border: 1px dashed var(--line);
       border-radius: 8px;
@@ -430,7 +458,7 @@
               id="common-file"
               name="file"
               type="file"
-              accept=".txt,.csv,.tsv,.md,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp3,.m4a,.wav,.webm,.mp4,.png,.jpg,.jpeg,.webp,.gif"
+              accept=".txt,.log,.rst,.tex,.csv,.tsv,.md,.markdown,.pdf,.json,.jsonl,.ndjson,.yaml,.yml,.xml,.html,.htm,.xhtml,.rtf,.eml,.py,.js,.jsx,.ts,.tsx,.java,.go,.rs,.c,.cc,.cpp,.h,.hpp,.cs,.rb,.php,.swift,.kt,.kts,.scala,.sh,.bash,.zsh,.sql,.css,.scss,.less,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.epub,.mp3,.m4a,.wav,.ogg,.oga,.flac,.mpga,.mp4,.mpeg,.mpg,.webm,.m4v,.png,.jpg,.jpeg,.webp,.gif"
             />
           </div>
           <div>
@@ -469,6 +497,14 @@
         <button id="run-agent" class="primary" type="button">Ask Agent</button>
         <div id="chat-status" class="status"></div>
         <div id="answer" class="answer-box">Select or create an agent.</div>
+        <div class="panel-header" style="padding:14px 0 0;border-bottom:0;">
+          <h2>Design Preview</h2>
+          <button id="preview-design" type="button">Preview</button>
+        </div>
+        <div id="preview-summary" class="answer-box">Select an agent to preview the design.</div>
+        <div id="tool-list" class="tool-list"></div>
+        <pre id="design-graph" class="graph-box">flowchart TD
+    FDE[FDE Preview] --> A[Agent]</pre>
       </div>
     </section>
   </main>
@@ -495,6 +531,9 @@
         chatStatus: $("chat-status"),
         answer: $("answer"),
         message: $("message"),
+        previewSummary: $("preview-summary"),
+        toolList: $("tool-list"),
+        designGraph: $("design-graph"),
       };
 
       const headers = () => ({
@@ -570,6 +609,21 @@
               ? `Demo answer for: ${body.message}\n\nRetrieved from ${sources.length} source${sources.length === 1 ? "" : "s"}:\n${searchable.slice(0, 900)}`
               : "No sources are attached to this demo agent yet.",
           };
+        }
+
+        const previewMatch = path.match(/^\/agents\/([^/]+)\/design-preview$/);
+        if (previewMatch && method === "GET") {
+          const agentId = previewMatch[1];
+          const agent = db.agents.find((item) => item.id === agentId);
+          if (!agent) {
+            throw new Error("Not found");
+          }
+          const sources = db.sources.filter((source) => source.agent_id === agentId);
+          const sourceCounts = {};
+          for (const source of sources) {
+            sourceCounts[source.source_type] = (sourceCounts[source.source_type] || 0) + 1;
+          }
+          return makeLocalDesignPreview(agent, sourceCounts);
         }
 
         const listMatch = path.match(/^\/agents\/([^/]+)\/knowledge-sources$/);
@@ -648,11 +702,14 @@
       }
 
       async function localPreview(file, kind) {
-        if (["markdown", "text", "csv"].includes(kind)) {
+        if (["markdown", "text", "csv", "json", "yaml", "xml", "html", "rtf", "email", "code"].includes(kind)) {
           return (await file.text()).slice(0, 4000);
         }
         if (kind === "audio") {
           return `Demo audio transcript for ${file.name}. In Live API mode this file is transcribed, then the transcript is attached to the agent vector store.`;
+        }
+        if (kind === "video") {
+          return `Demo video transcript for ${file.name}. In Live API mode supported videos are transcribed from their audio track, then the transcript is attached to the agent vector store.`;
         }
         if (kind === "image") {
           return `Demo image description for ${file.name}. In Live API mode this image is converted to text notes before retrieval.`;
@@ -664,12 +721,22 @@
         const lower = filename.toLowerCase();
         if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
         if (lower.endsWith(".pdf")) return "pdf";
-        if (lower.endsWith(".txt") || lower.endsWith(".log")) return "text";
+        if (lower.endsWith(".txt") || lower.endsWith(".log") || lower.endsWith(".rst") || lower.endsWith(".tex")) return "text";
         if (lower.endsWith(".csv") || lower.endsWith(".tsv")) return "csv";
+        if (lower.endsWith(".json") || lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "json";
+        if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "yaml";
+        if (lower.endsWith(".xml")) return "xml";
+        if (/\.(html?|xhtml)$/.test(lower)) return "html";
+        if (lower.endsWith(".rtf")) return "rtf";
+        if (lower.endsWith(".eml")) return "email";
+        if (/\.(py|js|jsx|ts|tsx|java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|swift|kt|kts|scala|sh|bash|zsh|sql|css|scss|less)$/.test(lower)) return "code";
         if (lower.endsWith(".doc") || lower.endsWith(".docx")) return "word";
         if (lower.endsWith(".xls") || lower.endsWith(".xlsx")) return "excel";
         if (lower.endsWith(".ppt") || lower.endsWith(".pptx")) return "powerpoint";
-        if (/\.(mp3|m4a|wav|webm|mp4)$/.test(lower)) return "audio";
+        if (/\.(odt|ods|odp)$/.test(lower)) return "opendocument";
+        if (lower.endsWith(".epub")) return "epub";
+        if (/\.(mp4|mpeg|mpg|webm|m4v)$/.test(lower) || String(contentType || "").startsWith("video/")) return "video";
+        if (/\.(mp3|m4a|wav|ogg|oga|flac|mpga)$/.test(lower)) return "audio";
         if (/\.(png|jpe?g|webp|gif)$/.test(lower) || String(contentType || "").startsWith("image/")) return "image";
         return "file";
       }
@@ -688,6 +755,45 @@
           byte_size: byteSize,
           error_message: null,
           created_at: new Date().toISOString(),
+        };
+      }
+
+      function makeLocalDesignPreview(agent, sourceCounts) {
+        const sourceLabel = Object.entries(sourceCounts).map(([key, value]) => `${key}(${value})`).join(", ") || "planned sources";
+        return {
+          agent_name: agent.name,
+          summary: `${agent.name} uses one agent-scoped vector store. Browser Demo mode simulates retrieval locally; Live API uses OpenAI FileSearchTool.`,
+          source_types: Object.keys(sourceCounts),
+          source_counts: sourceCounts,
+          tools: [
+            {name: "file_search", kind: "OpenAI hosted tool", purpose: "Search only this agent's vector store.", enabled: true},
+            {name: "audio_transcription", kind: "ingest adapter", purpose: "Convert audio into searchable transcript text.", enabled: true},
+            {name: "video_transcription", kind: "ingest adapter", purpose: "Convert supported videos into searchable transcript text.", enabled: true},
+            {name: "image_understanding", kind: "ingest adapter", purpose: "Convert images into searchable notes.", enabled: true},
+            {name: "design_preview", kind: "planning artifact", purpose: "Show FDE the planned agent and tool-calling graph.", enabled: true},
+          ],
+          mermaid: [
+            "flowchart TD",
+            `    FDE[FDE Preview] --> A[Agent: ${agent.name}]`,
+            "    A --> KB[Knowledge Scope: agent_id]",
+            `    KB --> S[Sources: ${sourceLabel}]`,
+            "    S --> V[Validate type / size / SSRF]",
+            "    V --> C{Conversion needed?}",
+            "    C -->|audio| T[Transcribe to text]",
+            "    C -->|video| VT[Transcribe video audio track to text]",
+            "    C -->|image| I[Describe / OCR-style notes]",
+            "    C -->|document/data| U[Upload file or extracted text]",
+            "    T --> U",
+            "    VT --> U",
+            "    I --> U",
+            "    U --> VS[OpenAI Vector Store]",
+            "    Q[User question] --> R[Agent Runtime]",
+            "    R --> FS[FileSearchTool]",
+            "    FS --> VS",
+            "    VS --> R",
+            "    R --> O[Answer constrained to this agent]",
+          ].join("\n"),
+          fde_notes: [],
         };
       }
 
@@ -896,6 +1002,29 @@
         }
       }
 
+      async function previewDesign() {
+        const agent = selectedAgent();
+        if (!agent) {
+          setStatus(els.chatStatus, "Create or select an agent first.", "error");
+          return;
+        }
+        setStatus(els.chatStatus, "Building preview...");
+        try {
+          const preview = await request(`/agents/${agent.id}/design-preview`);
+          els.previewSummary.textContent = preview.summary;
+          els.designGraph.textContent = preview.mermaid;
+          els.toolList.innerHTML = preview.tools.map((tool) => `
+            <div class="tool-item">
+              <div class="source-title">${escapeHtml(tool.name)}</div>
+              <div class="meta">${escapeHtml(tool.kind)} · ${escapeHtml(tool.purpose)}</div>
+            </div>
+          `).join("");
+          setStatus(els.chatStatus, "Preview ready.", "ok");
+        } catch (error) {
+          setStatus(els.chatStatus, error.message, "error");
+        }
+      }
+
       function activateTab(tabName) {
         for (const tab of document.querySelectorAll("#rag-demo-app .tab")) {
           tab.classList.toggle("active", tab.dataset.tab === tabName);
@@ -931,6 +1060,7 @@
       $("refresh-agents").addEventListener("click", loadAgents);
       $("refresh-sources").addEventListener("click", loadSources);
       $("run-agent").addEventListener("click", runAgent);
+      $("preview-design").addEventListener("click", previewDesign);
       els.token.addEventListener("change", loadAgents);
       els.demoMode.addEventListener("change", loadAgents);
 

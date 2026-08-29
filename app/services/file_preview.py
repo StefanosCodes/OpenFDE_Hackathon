@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import csv
+from email import policy
+from email.parser import BytesParser
+from html.parser import HTMLParser
 import io
 import re
 import zipfile
@@ -9,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 MAX_PREVIEW_CHARS = 4000
 XML_TEXT_PATTERN = re.compile(r"\s+")
+RTF_CONTROL_PATTERN = re.compile(r"\\[a-zA-Z]+\d* ?|\\.|[{}]")
 
 
 def text_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str:
@@ -24,6 +28,39 @@ def csv_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str:
         if index >= 24:
             break
     return "\n".join(rows)[:limit]
+
+
+def html_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str:
+    parser = _VisibleTextParser()
+    parser.feed(data.decode("utf-8", errors="replace"))
+    return parser.text()[:limit]
+
+
+def xml_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str:
+    try:
+        return _xml_text(data)[:limit]
+    except ET.ParseError:
+        return text_preview(data, limit)
+
+
+def rtf_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str:
+    text = data.decode("utf-8", errors="replace")
+    stripped = RTF_CONTROL_PATTERN.sub(" ", text)
+    return XML_TEXT_PATTERN.sub(" ", stripped).strip()[:limit]
+
+
+def email_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str:
+    message = BytesParser(policy=policy.default).parsebytes(data)
+    parts = []
+    if message["subject"]:
+        parts.append(f"Subject: {message['subject']}")
+    body = message.get_body(preferencelist=("plain", "html"))
+    if body is not None:
+        content = body.get_content()
+        if body.get_content_type() == "text/html":
+            content = html_preview(content.encode("utf-8"), limit)
+        parts.append(str(content))
+    return "\n\n".join(parts)[:limit]
 
 
 def docx_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str | None:
@@ -65,6 +102,54 @@ def pptx_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str | None:
             return preview[:limit] or None
     except (ET.ParseError, zipfile.BadZipFile):
         return None
+
+
+def opendocument_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str | None:
+    xml = _read_zip_member(data, "content.xml")
+    if xml is None:
+        return None
+    try:
+        return _xml_text(xml)[:limit] or None
+    except ET.ParseError:
+        return None
+
+
+def epub_preview(data: bytes, limit: int = MAX_PREVIEW_CHARS) -> str | None:
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            parts = []
+            for name in archive.namelist():
+                if name.lower().endswith((".html", ".xhtml", ".htm")):
+                    parts.append(html_preview(archive.read(name), limit))
+                if len("\n".join(parts)) >= limit:
+                    break
+            preview = "\n".join(part for part in parts if part)
+            return preview[:limit] or None
+    except zipfile.BadZipFile:
+        return None
+
+
+class _VisibleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._hidden_depth = 0
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "noscript"}:
+            self._hidden_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "noscript"} and self._hidden_depth:
+            self._hidden_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        text = " ".join(data.split())
+        if text and not self._hidden_depth:
+            self._parts.append(text)
+
+    def text(self) -> str:
+        return "\n".join(self._parts)
 
 
 def _read_zip_member(data: bytes, member: str) -> bytes | None:
