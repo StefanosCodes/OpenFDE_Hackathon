@@ -15,10 +15,13 @@ export function AgentDesignPage() {
   const agent = useAgent(agentId);
   const [draft, setDraft] = React.useState("");
   const [draftConnectors, setDraftConnectors] = React.useState<string[]>([]);
+  const [isSending, setIsSending] = React.useState(false);
+  const [isGenerating, setIsGenerating] = React.useState(false);
 
   const enabledConnectorIds = agent?.enabledConnectorIds ?? draftConnectors;
 
   const toggleConnector = (id: string) => {
+    if (isSending || isGenerating) return;
     if (agent) {
       updateAgentTools(agent.id, {
         enabledConnectorIds: toggleConnectorId(agent.enabledConnectorIds, id),
@@ -28,23 +31,28 @@ export function AgentDesignPage() {
     setDraftConnectors((current) => toggleConnectorId(current, id));
   };
 
-  const send = () => {
+  const send = async () => {
     const input = draft.trim();
-    if (!input) return;
+    if (!input || isSending) return;
+    setIsSending(true);
 
-    if (!agentId) {
-      const created = createAgent(input, {
-        enabledConnectorIds: draftConnectors,
-      });
-      if (!created) return;
-      setDraft("");
-      navigate(`/agents/${created.id}/design`, { replace: true });
-      return;
-    }
+    try {
+      if (!agentId) {
+        const created = await createAgent(input, {
+          enabledConnectorIds: draftConnectors,
+        });
+        if (!created) return;
+        setDraft("");
+        navigate(`/agents/${created.id}/design`, { replace: true });
+        return;
+      }
 
-    if (agent) {
-      addMessage(agent.id, input);
-      setDraft("");
+      if (agent) {
+        await addMessage(agent.id, input);
+        setDraft("");
+      }
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -65,14 +73,24 @@ export function AgentDesignPage() {
     : agent.artifact
       ? {
           label: "Generate visual map",
-          onClick: () => {
+          onClick: async () => {
             generateCanvas(agent.id);
             navigate(`/agents/${agent.id}/canvas`);
           },
+          disabled: isGenerating,
         }
       : {
           label: "Generate Agent Design",
-          onClick: () => generateArtifact(agent.id),
+          onClick: async () => {
+            if (isGenerating) return;
+            setIsGenerating(true);
+            try {
+              await generateArtifact(agent.id);
+            } finally {
+              setIsGenerating(false);
+            }
+          },
+          disabled: isGenerating,
         };
 
   return (
@@ -104,6 +122,7 @@ export function AgentDesignPage() {
           enabledConnectorIds={enabledConnectorIds}
           onToggleConnector={toggleConnector}
           nextAction={nextAction}
+          isBusy={isSending || isGenerating}
         />
         {agent?.artifact ? (
           <DesignArtifactPanel markdown={agent.artifact.markdown} />

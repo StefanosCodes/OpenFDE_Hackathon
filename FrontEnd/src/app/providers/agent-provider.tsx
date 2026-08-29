@@ -2,6 +2,7 @@ import * as React from "react";
 
 import {
   addConversationTurn,
+  applyDesignArtifact,
   applyGeneratedCanvas,
   createAgentFromPrompt,
   createDesignArtifact,
@@ -9,6 +10,10 @@ import {
   markAgentSubmitted,
 } from "@/entities/agent/model/agent-state";
 import type { Agent, CanvasDocument } from "@/entities/agent/model/types";
+import {
+  requestDesignArtifact,
+  requestDesignChat,
+} from "@/shared/api/design-api";
 
 const STORAGE_KEY = "openfde-agent-builder-v1";
 
@@ -19,11 +24,11 @@ type AgentTools = {
 
 type AgentContextValue = {
   agents: Agent[];
-  createAgent: (prompt: string, extras?: AgentTools) => Agent | null;
+  createAgent: (prompt: string, extras?: AgentTools) => Promise<Agent | null>;
   deleteAgent: (agentId: string) => void;
-  addMessage: (agentId: string, prompt: string) => void;
+  addMessage: (agentId: string, prompt: string) => Promise<void>;
   updateAgentTools: (agentId: string, tools: AgentTools) => void;
-  generateArtifact: (agentId: string) => void;
+  generateArtifact: (agentId: string) => Promise<void>;
   generateCanvas: (agentId: string) => void;
   updateCanvas: (agentId: string, canvas: CanvasDocument) => void;
   submitAgent: (agentId: string) => void;
@@ -73,13 +78,43 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     }
   }, [agents]);
 
-  const createAgent = React.useCallback((prompt: string, extras?: AgentTools) => {
-    const agent = createAgentFromPrompt(
-      prompt,
-      () => crypto.randomUUID(),
-      Date.now(),
-      extras,
-    );
+  const createAgent = React.useCallback(async (prompt: string, extras?: AgentTools) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) return null;
+
+    let agent: Agent | null;
+    try {
+      const response = await requestDesignChat({
+        agent_name: null,
+        messages: [{ role: "user", content: trimmed }],
+        enabled_connector_ids: extras?.enabledConnectorIds ?? [],
+        skill_id: extras?.skillId ?? null,
+      });
+      agent = createAgentFromPrompt(
+        trimmed,
+        () => crypto.randomUUID(),
+        Date.now(),
+        {
+          ...extras,
+          assistantMessage: response.assistant_message,
+          suggestedAgentName: response.suggested_agent_name,
+          readinessScore: response.readiness_score,
+          missingInformation: response.missing_information,
+          canGenerateDesign: response.can_generate_design,
+        },
+      );
+    } catch {
+      agent = createAgentFromPrompt(
+        trimmed,
+        () => crypto.randomUUID(),
+        Date.now(),
+        {
+          ...extras,
+          modelError: "Live model request failed; using local draft mode.",
+        },
+      );
+    }
+
     if (!agent) return null;
     setAgents((current) => [agent, ...current]);
     return agent;
@@ -99,10 +134,47 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addMessage = React.useCallback(
-    (agentId: string, prompt: string) => {
-      changeAgent(agentId, (agent) => addConversationTurn(agent, prompt));
+    async (agentId: string, prompt: string) => {
+      const agent = agents.find((item) => item.id === agentId);
+      const trimmed = prompt.trim();
+      if (!agent || !trimmed) return;
+
+      const messages = [
+        ...agent.messages.map(({ role, content }) => ({ role, content })),
+        { role: "user" as const, content: trimmed },
+      ];
+
+      try {
+        const response = await requestDesignChat({
+          agent_name: agent.name,
+          messages,
+          enabled_connector_ids: agent.enabledConnectorIds,
+          skill_id: agent.skillId,
+        });
+        changeAgent(agentId, (current) =>
+          addConversationTurn(
+            current,
+            trimmed,
+            () => crypto.randomUUID(),
+            Date.now(),
+            response.assistant_message,
+            {
+              suggestedAgentName: response.suggested_agent_name,
+              readinessScore: response.readiness_score,
+              missingInformation: response.missing_information,
+              canGenerateDesign: response.can_generate_design,
+            },
+          ),
+        );
+      } catch {
+        changeAgent(agentId, (current) =>
+          addConversationTurn(current, trimmed, undefined, undefined, undefined, {
+            modelError: "Live model request failed; using local draft mode.",
+          }),
+        );
+      }
     },
-    [changeAgent],
+    [agents, changeAgent],
   );
 
   const updateAgentTools = React.useCallback(
@@ -119,14 +191,44 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   );
 
   const generateArtifact = React.useCallback(
-    (agentId: string) => {
-      changeAgent(agentId, (agent) => ({
-        ...agent,
-        artifact: createDesignArtifact(agent),
-        updatedAt: Date.now(),
-      }));
+    async (agentId: string) => {
+      const agent = agents.find((item) => item.id === agentId);
+      if (!agent) return;
+
+      try {
+        const response = await requestDesignArtifact({
+          agent_name: agent.name,
+          messages: agent.messages.map(({ role, content }) => ({ role, content })),
+          enabled_connector_ids: agent.enabledConnectorIds,
+          skill_id: agent.skillId,
+        });
+        changeAgent(agentId, (current) =>
+          applyDesignArtifact(
+            current,
+            {
+              agentName: response.agent_name,
+              markdown: response.markdown,
+              canvas: response.canvas,
+              mermaid: response.mermaid,
+              knowledgeSources: response.knowledge_sources,
+              intents: response.intents,
+              datasets: response.datasets,
+              datasetExports: response.dataset_exports,
+            },
+            () => crypto.randomUUID(),
+            Date.now(),
+          ),
+        );
+      } catch {
+        changeAgent(agentId, (agent) => ({
+          ...agent,
+          artifact: createDesignArtifact(agent),
+          modelError: "Live artifact request failed; using local draft mode.",
+          updatedAt: Date.now(),
+        }));
+      }
     },
-    [changeAgent],
+    [agents, changeAgent],
   );
 
   const generateCanvas = React.useCallback(

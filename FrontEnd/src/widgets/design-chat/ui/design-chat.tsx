@@ -17,6 +17,7 @@ export function DesignChat({
   enabledConnectorIds,
   onToggleConnector,
   nextAction,
+  isBusy = false,
 }: {
   messages: ChatMessage[];
   draft: string;
@@ -24,7 +25,8 @@ export function DesignChat({
   onSend: () => void;
   enabledConnectorIds: string[];
   onToggleConnector: (id: string) => void;
-  nextAction?: { label: string; onClick: () => void } | null;
+  nextAction?: { label: string; onClick: () => void; disabled?: boolean } | null;
+  isBusy?: boolean;
 }) {
   const isEmpty = messages.length === 0;
   const composer = (
@@ -34,6 +36,7 @@ export function DesignChat({
       onSubmit={onSend}
       enabledConnectorIds={enabledConnectorIds}
       onToggleConnector={onToggleConnector}
+      disabled={isBusy}
     />
   );
 
@@ -76,8 +79,9 @@ export function DesignChat({
                 type="button"
                 className="composer-next-action__button"
                 onClick={nextAction.onClick}
+                disabled={isBusy || nextAction.disabled}
               >
-                {nextAction.label}
+                {isBusy && nextAction.disabled ? "Working..." : nextAction.label}
                 <ArrowRight size={15} />
               </button>
             </div>

@@ -18,3 +18,5 @@ def test_openapi_contains_knowledge_endpoints():
     assert "/v1/connectors/github/repositories" in paths
     assert "/v1/connectors/github/repository" in paths
     assert "/v1/integrations/github/webhook" in paths
+    assert "/v1/agent-design/chat" in paths
+    assert "/v1/agent-design/artifact" in paths

@@ -22,14 +22,16 @@ export function ChatComposer({
   showConnectors = true,
   enabledConnectorIds,
   onToggleConnector,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
   placeholder?: string;
   showConnectors?: boolean;
   enabledConnectorIds: string[];
   onToggleConnector: (id: string) => void;
+  disabled?: boolean;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -68,7 +70,7 @@ export function ChatComposer({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (paletteOpen) return;
-      if (value.trim()) onSubmit();
+      if (value.trim() && !disabled) void onSubmit();
     }
   };
 
@@ -90,14 +92,15 @@ export function ChatComposer({
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
+            disabled={disabled}
             rows={1}
           />
           <button
             type="button"
             className="composer-send"
             aria-label="Send message"
-            disabled={!value.trim()}
-            onClick={onSubmit}
+            disabled={!value.trim() || disabled}
+            onClick={() => void onSubmit()}
           >
             <ArrowUp size={16} />
           </button>
@@ -109,6 +112,7 @@ export function ChatComposer({
           enabledIds={enabledConnectorIds}
           expanded={paletteOpen}
           onOpen={() => {
+            if (disabled) return;
             if (slashOpen) {
               onChange(stripTrailingSlash(value));
             }

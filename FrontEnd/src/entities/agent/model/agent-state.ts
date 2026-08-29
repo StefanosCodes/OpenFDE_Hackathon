@@ -8,6 +8,31 @@ import type {
 
 type IdFactory = () => string;
 
+type DiscoveryMetadata = {
+  suggestedAgentName?: string;
+  readinessScore?: number;
+  missingInformation?: string[];
+  canGenerateDesign?: boolean;
+  modelError?: string | null;
+};
+
+type CreateAgentExtras = {
+  enabledConnectorIds?: string[];
+  skillId?: string | null;
+  assistantMessage?: string;
+} & DiscoveryMetadata;
+
+type DesignArtifactResult = {
+  agentName: string;
+  markdown: string;
+  canvas: CanvasDocument;
+  mermaid?: string;
+  knowledgeSources?: unknown[];
+  intents?: unknown[];
+  datasets?: unknown[];
+  datasetExports?: Record<string, string>;
+};
+
 export function deriveAgentName(input: string) {
   const trimmed = input.trim().replace(/\s+/g, " ");
   if (!trimmed) return "Untitled agent";
@@ -18,26 +43,28 @@ export function createAgentFromPrompt(
   rawPrompt: string,
   makeId: IdFactory = () => crypto.randomUUID(),
   now = Date.now(),
-  extras: { enabledConnectorIds?: string[]; skillId?: string | null } = {},
+  extras: CreateAgentExtras = {},
 ): Agent | null {
   const prompt = rawPrompt.trim();
   if (!prompt) return null;
+  const assistantMessage =
+    extras.assistantMessage ??
+    "Great — I started this agent. Tell me who it helps, what it should do, and what a successful result looks like. When the idea feels right, we can turn it into a design brief.";
 
   return {
     id: makeId(),
-    name: deriveAgentName(prompt),
+    name: extras.suggestedAgentName?.trim() || deriveAgentName(prompt),
     createdAt: now,
     updatedAt: now,
     enabledConnectorIds: extras.enabledConnectorIds ?? [],
     skillId: extras.skillId ?? null,
+    readinessScore: extras.readinessScore,
+    missingInformation: extras.missingInformation,
+    canGenerateDesign: extras.canGenerateDesign,
+    modelError: extras.modelError ?? null,
     messages: [
       createMessage("user", prompt, makeId, now),
-      createMessage(
-        "assistant",
-        "Great — I started this agent. Tell me who it helps, what it should do, and what a successful result looks like. When the idea feels right, we can turn it into a design brief.",
-        makeId,
-        now,
-      ),
+      createMessage("assistant", assistantMessage, makeId, now),
     ],
   };
 }
@@ -53,22 +80,56 @@ export function addConversationTurn(
   rawPrompt: string,
   makeId: IdFactory = () => crypto.randomUUID(),
   now = Date.now(),
+  assistantMessage?: string,
+  metadata: DiscoveryMetadata = {},
 ): Agent {
   const prompt = rawPrompt.trim();
   if (!prompt) return agent;
 
-  const answer = agent.canvas
-    ? "I’ve added that to our conversation. The map stays unchanged until you choose to apply a suggested edit."
-    : "That helps. I’m shaping the goal, audience, knowledge, actions, and boundaries into a simple plan. Add anything else that matters, or create the design brief when you’re ready.";
+  const answer =
+    assistantMessage ??
+    (agent.canvas
+      ? "I’ve added that to our conversation. The map stays unchanged until you choose to apply a suggested edit."
+      : "That helps. I’m shaping the goal, audience, knowledge, actions, and boundaries into a simple plan. Add anything else that matters, or create the design brief when you’re ready.");
 
   return {
     ...agent,
+    name: metadata.suggestedAgentName?.trim() || agent.name,
+    readinessScore: metadata.readinessScore ?? agent.readinessScore,
+    missingInformation: metadata.missingInformation ?? agent.missingInformation,
+    canGenerateDesign: metadata.canGenerateDesign ?? agent.canGenerateDesign,
+    modelError: metadata.modelError ?? null,
     updatedAt: now,
     messages: [
       ...agent.messages,
       createMessage("user", prompt, makeId, now),
       createMessage("assistant", answer, makeId, now),
     ],
+  };
+}
+
+export function applyDesignArtifact(
+  agent: Agent,
+  result: DesignArtifactResult,
+  makeId: IdFactory = () => crypto.randomUUID(),
+  now = Date.now(),
+): Agent {
+  return {
+    ...agent,
+    name: result.agentName || agent.name,
+    artifact: {
+      id: makeId(),
+      markdown: result.markdown,
+      createdAt: now,
+    },
+    proposedCanvas: result.canvas,
+    mermaid: result.mermaid,
+    knowledgeSources: result.knowledgeSources,
+    intents: result.intents,
+    datasets: result.datasets,
+    datasetExports: result.datasetExports,
+    modelError: null,
+    updatedAt: now,
   };
 }
 
@@ -197,7 +258,7 @@ export function applyGeneratedCanvas(
   return {
     ...agent,
     artifact: agent.artifact ?? createDesignArtifact(agent, makeId, now),
-    canvas: createCanvasDocument(makeId, now),
+    canvas: agent.proposedCanvas ?? createCanvasDocument(makeId, now),
     submittedAt: undefined,
     updatedAt: now,
   };

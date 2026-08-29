@@ -45,6 +45,16 @@ export type Agent = {
   messages: ChatMessage[];
   enabledConnectorIds: string[];
   skillId: string | null;
+  proposedCanvas?: CanvasDocument;
+  readinessScore?: number;
+  missingInformation?: string[];
+  canGenerateDesign?: boolean;
+  mermaid?: string;
+  knowledgeSources?: unknown[];
+  intents?: unknown[];
+  datasets?: unknown[];
+  datasetExports?: Record<string, string>;
+  modelError?: string | null;
   artifact?: DesignArtifact;
   canvas?: CanvasDocument;
   submittedAt?: number;
