@@ -3,6 +3,14 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Node / frontend
+node_modules/
+**/node_modules/
+.vite/
+**/.vite/
+dist/
+**/dist/
+
 # C extensions
 *.so
 
