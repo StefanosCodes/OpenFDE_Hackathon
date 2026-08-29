@@ -157,6 +157,7 @@ activemq-data/
 
 # Environments
 .env
+.env.github-app
 .envrc
 .venv
 env/
@@ -164,6 +165,11 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Local integration secrets
+.secrets/
+*.pem
+*.key
 
 # Spyder project settings
 .spyderproject
