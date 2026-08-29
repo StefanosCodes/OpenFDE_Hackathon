@@ -10,14 +10,44 @@ Agent-scoped RAG knowledge base backend slice for the OpenFDE hackathon scaffold
 - Agent runs use `FileSearchTool` with only that agent's vector store.
 - Agent designs can be previewed before FDE handoff with a structured summary and Mermaid tool-calling graph.
 - PostgreSQL stores metadata only. It does not store embeddings, chunks, or vectors.
+- A read-only GitHub App connector lets each OpenFDE user install the shared app,
+  choose an exposed repository, and make that repository available to the future runner.
 
 ## Not In This Slice
 
-- React UI
 - `pgvector`
 - SQLAlchemy or another ORM
 - Redis, Celery, or background workers
 - MCP, Linear, Atlassian, artifact generation, F2E handoff
+
+## GitHub App connector
+
+Local GitHub App settings live only in the hidden `.env.github-app` file. That file,
+`.secrets/`, and private key files are ignored by git. The connector loader does not
+override variables already supplied by the shell or deployment platform.
+
+The file uses these keys:
+
+```dotenv
+APP_BASE_URL=http://localhost:8001
+FRONTEND_BASE_URL=http://localhost:5173
+COOKIE_SECURE=false
+GITHUB_APP_ID=
+GITHUB_APP_SLUG=
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+GITHUB_APP_PRIVATE_KEY_PATH=.secrets/openfde-demo.pem
+GITHUB_STATE_SECRET=
+GITHUB_WEBHOOK_SECRET=
+```
+
+`GITHUB_WEBHOOK_SECRET` is optional while webhooks are disabled. Run migration
+`005_github_connections.sql` before testing the connector against the normal API.
+The frontend defaults to `http://localhost:8001`; deployments can set
+`VITE_API_BASE_URL` and `VITE_DEMO_AUTH_TOKEN` during the frontend build.
+
+Disconnecting in OpenFDE removes the OpenFDE connection. It intentionally does not
+uninstall the GitHub App from the GitHub account or organization.
 
 ## Setup
 
