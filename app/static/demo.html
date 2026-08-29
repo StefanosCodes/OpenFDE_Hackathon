@@ -1,0 +1,1091 @@
+<div id="rag-demo-app">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --panel-soft: #f1f5f9;
+      --text: #172033;
+      --muted: #667085;
+      --line: #d9dee8;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --ok: #047857;
+      --warn: #b45309;
+      --bad: #b91c1c;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    #rag-demo-app {
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 280px minmax(360px, 1fr) 420px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .topbar {
+      max-width: 1400px;
+      margin: 0 auto 16px;
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 10px 11px;
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 112px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 6px;
+      min-height: 38px;
+      padding: 8px 11px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 650;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      background: var(--panel-soft);
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:hover {
+      background: var(--accent-dark);
+    }
+
+    button.danger {
+      color: var(--bad);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      min-height: 52px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .row > .grow {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .agent-list,
+    .source-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .agent-item,
+    .source-item,
+    .answer-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 11px;
+    }
+
+    .agent-item {
+      width: 100%;
+      min-height: 58px;
+      justify-content: flex-start;
+      align-items: flex-start;
+      display: grid;
+      gap: 3px;
+      text-align: left;
+    }
+
+    .agent-item.active {
+      border-color: var(--accent);
+      background: #eff6ff;
+    }
+
+    .agent-name,
+    .source-title {
+      font-size: 14px;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .source-item {
+      display: grid;
+      gap: 8px;
+    }
+
+    .source-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #ecfdf5;
+      color: var(--ok);
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    .preview {
+      max-height: 88px;
+      overflow: auto;
+      border-left: 3px solid var(--line);
+      padding-left: 9px;
+      color: #344054;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .tab {
+      border: 0;
+      border-radius: 0;
+      min-height: 36px;
+      background: #fff;
+      color: var(--muted);
+    }
+
+    .tab.active {
+      background: var(--panel-soft);
+      color: var(--text);
+    }
+
+    .status {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .status.error {
+      color: var(--bad);
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .answer-box {
+      min-height: 160px;
+      white-space: pre-wrap;
+      line-height: 1.55;
+      font-size: 14px;
+      color: #273449;
+    }
+
+    .graph-box {
+      min-height: 220px;
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #dbeafe;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre;
+    }
+
+    .tool-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tool-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      gap: 3px;
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      min-height: 80px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 16px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 1120px) {
+      .shell {
+        grid-template-columns: 260px 1fr;
+      }
+
+      .chat-panel {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 760px) {
+      #rag-demo-app {
+        padding: 14px;
+      }
+
+      .topbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .row {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+  </style>
+
+  <div class="topbar">
+    <h1>Agent Knowledge Demo</h1>
+    <div class="row">
+      <div>
+        <label for="demo-mode">Mode</label>
+        <select id="demo-mode">
+          <option value="local">Browser Demo</option>
+          <option value="api">Live API</option>
+        </select>
+      </div>
+      <div>
+        <label for="token">User</label>
+        <select id="token">
+          <option value="user-a">Seeded User A</option>
+          <option value="user-b">Seeded User B</option>
+        </select>
+      </div>
+      <div>
+        <label for="api-base">API Base</label>
+        <input id="api-base" value="/v1" />
+      </div>
+    </div>
+  </div>
+
+  <main class="shell">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Agents</h2>
+        <button id="refresh-agents" type="button" aria-label="Refresh agents">Refresh</button>
+      </div>
+      <div class="panel-body stack">
+        <div class="row">
+          <input id="agent-name" class="grow" placeholder="New agent name" />
+          <button id="create-agent" class="primary" type="button">Create</button>
+        </div>
+        <div id="agent-list" class="agent-list"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Knowledge Sources</h2>
+        <button id="refresh-sources" type="button">Refresh</button>
+      </div>
+      <div class="panel-body stack">
+        <div class="tabs" role="tablist">
+          <button class="tab active" type="button" data-tab="markdown">Markdown</button>
+          <button class="tab" type="button" data-tab="pdf">PDF</button>
+          <button class="tab" type="button" data-tab="files">Files</button>
+          <button class="tab" type="button" data-tab="url">URL</button>
+        </div>
+
+        <form id="markdown-form" class="stack" data-form="markdown">
+          <div>
+            <label for="markdown-file">Markdown File</label>
+            <input id="markdown-file" name="file" type="file" accept=".md,text/markdown,text/plain" />
+          </div>
+          <div>
+            <label for="markdown-title">Title</label>
+            <input id="markdown-title" name="title" placeholder="Optional" />
+          </div>
+          <button class="primary" type="submit">Upload Markdown</button>
+        </form>
+
+        <form id="pdf-form" class="stack hidden" data-form="pdf">
+          <div>
+            <label for="pdf-file">PDF File</label>
+            <input id="pdf-file" name="file" type="file" accept="application/pdf,.pdf" />
+          </div>
+          <div>
+            <label for="pdf-title">Title</label>
+            <input id="pdf-title" name="title" placeholder="Optional" />
+          </div>
+          <button class="primary" type="submit">Upload PDF</button>
+        </form>
+
+        <form id="files-form" class="stack hidden" data-form="files">
+          <div>
+            <label for="common-file">Common File</label>
+            <input
+              id="common-file"
+              name="file"
+              type="file"
+              accept=".txt,.log,.rst,.tex,.csv,.tsv,.md,.markdown,.pdf,.json,.jsonl,.ndjson,.yaml,.yml,.xml,.html,.htm,.xhtml,.rtf,.eml,.py,.js,.jsx,.ts,.tsx,.java,.go,.rs,.c,.cc,.cpp,.h,.hpp,.cs,.rb,.php,.swift,.kt,.kts,.scala,.sh,.bash,.zsh,.sql,.css,.scss,.less,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.epub,.mp3,.m4a,.wav,.ogg,.oga,.flac,.mpga,.mp4,.mpeg,.mpg,.webm,.m4v,.png,.jpg,.jpeg,.webp,.gif"
+            />
+          </div>
+          <div>
+            <label for="files-title">Title</label>
+            <input id="files-title" name="title" placeholder="Optional" />
+          </div>
+          <button class="primary" type="submit">Upload File</button>
+        </form>
+
+        <form id="url-form" class="stack hidden" data-form="url">
+          <div>
+            <label for="source-url">HTTPS URL</label>
+            <input id="source-url" name="url" placeholder="https://example.com/source" />
+          </div>
+          <div>
+            <label for="url-title">Title</label>
+            <input id="url-title" name="title" placeholder="Optional" />
+          </div>
+          <button class="primary" type="submit">Add URL</button>
+        </form>
+
+        <div id="source-status" class="status"></div>
+        <div id="source-list" class="source-list"></div>
+      </div>
+    </section>
+
+    <section class="panel chat-panel">
+      <div class="panel-header">
+        <h2>Chat Test</h2>
+      </div>
+      <div class="panel-body stack">
+        <div>
+          <label for="message">Message</label>
+          <textarea id="message" placeholder="Ask the selected agent..."></textarea>
+        </div>
+        <button id="run-agent" class="primary" type="button">Ask Agent</button>
+        <div id="chat-status" class="status"></div>
+        <div id="answer" class="answer-box">Select or create an agent.</div>
+        <div class="panel-header" style="padding:14px 0 0;border-bottom:0;">
+          <h2>Design Preview</h2>
+          <button id="preview-design" type="button">Preview</button>
+        </div>
+        <div id="preview-summary" class="answer-box">Select an agent to preview the design.</div>
+        <div id="tool-list" class="tool-list"></div>
+        <pre id="design-graph" class="graph-box">flowchart TD
+    FDE[FDE Preview] --> A[Agent]</pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const state = {
+        agents: [],
+        sources: [],
+        selectedAgentId: null,
+      };
+      const storageKey = () => `rag-demo:${els.token.value}`;
+
+      const $ = (id) => document.getElementById(id);
+
+      const els = {
+        apiBase: $("api-base"),
+        demoMode: $("demo-mode"),
+        token: $("token"),
+        agentName: $("agent-name"),
+        agentList: $("agent-list"),
+        sourceList: $("source-list"),
+        sourceStatus: $("source-status"),
+        chatStatus: $("chat-status"),
+        answer: $("answer"),
+        message: $("message"),
+        previewSummary: $("preview-summary"),
+        toolList: $("tool-list"),
+        designGraph: $("design-graph"),
+      };
+
+      const headers = () => ({
+        "Authorization": `Bearer ${els.token.value}`,
+      });
+
+      const apiUrl = (path) => `${els.apiBase.value.replace(/\/$/, "")}${path}`;
+
+      async function request(path, options = {}) {
+        if (els.demoMode.value === "local") {
+          return localRequest(path, options);
+        }
+
+        const response = await fetch(apiUrl(path), {
+          ...options,
+          headers: {
+            ...headers(),
+            ...(options.headers || {}),
+          },
+        });
+
+        if (response.status === 204) {
+          return null;
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        const body = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+
+        if (!response.ok) {
+          const detail = typeof body === "object" && body && body.detail ? body.detail : response.statusText;
+          throw new Error(detail);
+        }
+
+        return body;
+      }
+
+      async function localRequest(path, options = {}) {
+        const db = readLocalDb();
+        const method = options.method || "GET";
+
+        if (path === "/agents" && method === "GET") {
+          return db.agents.sort(sortCreatedDesc);
+        }
+
+        if (path === "/agents" && method === "POST") {
+          const body = JSON.parse(options.body || "{}");
+          const agent = {
+            id: crypto.randomUUID(),
+            owner_user_id: els.token.value,
+            name: body.name,
+            openai_vector_store_id: `vs_demo_${Date.now()}`,
+            created_at: new Date().toISOString(),
+          };
+          db.agents.unshift(agent);
+          writeLocalDb(db);
+          return agent;
+        }
+
+        const runMatch = path.match(/^\/agents\/([^/]+)\/run$/);
+        if (runMatch && method === "POST") {
+          const agentId = runMatch[1];
+          const body = JSON.parse(options.body || "{}");
+          const sources = db.sources.filter((source) => source.agent_id === agentId);
+          const searchable = sources
+            .map((source) => source.content_preview || source.title || "")
+            .join("\n")
+            .trim();
+          return {
+            agent_id: agentId,
+            answer: searchable
+              ? `Demo answer for: ${body.message}\n\nRetrieved from ${sources.length} source${sources.length === 1 ? "" : "s"}:\n${searchable.slice(0, 900)}`
+              : "No sources are attached to this demo agent yet.",
+          };
+        }
+
+        const previewMatch = path.match(/^\/agents\/([^/]+)\/design-preview$/);
+        if (previewMatch && method === "GET") {
+          const agentId = previewMatch[1];
+          const agent = db.agents.find((item) => item.id === agentId);
+          if (!agent) {
+            throw new Error("Not found");
+          }
+          const sources = db.sources.filter((source) => source.agent_id === agentId);
+          const sourceCounts = {};
+          for (const source of sources) {
+            sourceCounts[source.source_type] = (sourceCounts[source.source_type] || 0) + 1;
+          }
+          return makeLocalDesignPreview(agent, sourceCounts);
+        }
+
+        const listMatch = path.match(/^\/agents\/([^/]+)\/knowledge-sources$/);
+        if (listMatch && method === "GET") {
+          return db.sources.filter((source) => source.agent_id === listMatch[1]).sort(sortCreatedDesc);
+        }
+
+        const uploadMatch = path.match(/^\/agents\/([^/]+)\/knowledge-sources\/(markdown|pdf|files)$/);
+        if (uploadMatch && method === "POST") {
+          const agentId = uploadMatch[1];
+          const routeKind = uploadMatch[2];
+          const formData = options.body;
+          const file = formData.get("file");
+          const title = String(formData.get("title") || file.name || routeKind);
+          const kind = routeKind === "files" ? inferLocalSourceType(file.name, file.type) : routeKind;
+          const preview = await localPreview(file, kind);
+          const source = makeLocalSource({
+            agentId,
+            sourceType: kind,
+            title,
+            filename: file.name,
+            byteSize: file.size,
+            preview: preview ? preview.slice(0, 4000) : null,
+            url: null,
+          });
+          db.sources.unshift(source);
+          writeLocalDb(db);
+          return source;
+        }
+
+        const urlMatch = path.match(/^\/agents\/([^/]+)\/knowledge-sources\/url$/);
+        if (urlMatch && method === "POST") {
+          const body = JSON.parse(options.body || "{}");
+          if (!String(body.url || "").startsWith("https://")) {
+            throw new Error("Only https URLs are allowed");
+          }
+          const source = makeLocalSource({
+            agentId: urlMatch[1],
+            sourceType: "url",
+            title: body.title || body.url,
+            filename: null,
+            byteSize: null,
+            preview: `Demo URL source: ${body.url}`,
+            url: body.url,
+          });
+          db.sources.unshift(source);
+          writeLocalDb(db);
+          return source;
+        }
+
+        const deleteMatch = path.match(/^\/agents\/([^/]+)\/knowledge-sources\/([^/]+)$/);
+        if (deleteMatch && method === "DELETE") {
+          db.sources = db.sources.filter((source) => source.id !== deleteMatch[2]);
+          writeLocalDb(db);
+          return null;
+        }
+
+        throw new Error("Demo route is not implemented");
+      }
+
+      function readLocalDb() {
+        const raw = localStorage.getItem(storageKey());
+        if (!raw) {
+          return {agents: [], sources: []};
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          return {agents: parsed.agents || [], sources: parsed.sources || []};
+        } catch {
+          return {agents: [], sources: []};
+        }
+      }
+
+      function writeLocalDb(db) {
+        localStorage.setItem(storageKey(), JSON.stringify(db));
+      }
+
+      async function localPreview(file, kind) {
+        if (["markdown", "text", "csv", "json", "yaml", "xml", "html", "rtf", "email", "code"].includes(kind)) {
+          return (await file.text()).slice(0, 4000);
+        }
+        if (kind === "audio") {
+          return `Demo audio transcript for ${file.name}. In Live API mode this file is transcribed, then the transcript is attached to the agent vector store.`;
+        }
+        if (kind === "video") {
+          return `Demo video transcript for ${file.name}. In Live API mode supported videos are transcribed from their audio track, then the transcript is attached to the agent vector store.`;
+        }
+        if (kind === "image") {
+          return `Demo image description for ${file.name}. In Live API mode this image is converted to text notes before retrieval.`;
+        }
+        return null;
+      }
+
+      function inferLocalSourceType(filename, contentType) {
+        const lower = filename.toLowerCase();
+        if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
+        if (lower.endsWith(".pdf")) return "pdf";
+        if (lower.endsWith(".txt") || lower.endsWith(".log") || lower.endsWith(".rst") || lower.endsWith(".tex")) return "text";
+        if (lower.endsWith(".csv") || lower.endsWith(".tsv")) return "csv";
+        if (lower.endsWith(".json") || lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "json";
+        if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "yaml";
+        if (lower.endsWith(".xml")) return "xml";
+        if (/\.(html?|xhtml)$/.test(lower)) return "html";
+        if (lower.endsWith(".rtf")) return "rtf";
+        if (lower.endsWith(".eml")) return "email";
+        if (/\.(py|js|jsx|ts|tsx|java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|swift|kt|kts|scala|sh|bash|zsh|sql|css|scss|less)$/.test(lower)) return "code";
+        if (lower.endsWith(".doc") || lower.endsWith(".docx")) return "word";
+        if (lower.endsWith(".xls") || lower.endsWith(".xlsx")) return "excel";
+        if (lower.endsWith(".ppt") || lower.endsWith(".pptx")) return "powerpoint";
+        if (/\.(odt|ods|odp)$/.test(lower)) return "opendocument";
+        if (lower.endsWith(".epub")) return "epub";
+        if (/\.(mp4|mpeg|mpg|webm|m4v)$/.test(lower) || String(contentType || "").startsWith("video/")) return "video";
+        if (/\.(mp3|m4a|wav|ogg|oga|flac|mpga)$/.test(lower)) return "audio";
+        if (/\.(png|jpe?g|webp|gif)$/.test(lower) || String(contentType || "").startsWith("image/")) return "image";
+        return "file";
+      }
+
+      function makeLocalSource({agentId, sourceType, title, filename, byteSize, preview, url}) {
+        return {
+          id: crypto.randomUUID(),
+          agent_id: agentId,
+          source_type: sourceType,
+          status: "ready",
+          title,
+          original_filename: filename,
+          source_url: url,
+          content_preview: preview,
+          openai_file_id: `file_demo_${Date.now()}`,
+          byte_size: byteSize,
+          error_message: null,
+          created_at: new Date().toISOString(),
+        };
+      }
+
+      function makeLocalDesignPreview(agent, sourceCounts) {
+        const sourceLabel = Object.entries(sourceCounts).map(([key, value]) => `${key}(${value})`).join(", ") || "planned sources";
+        return {
+          agent_name: agent.name,
+          summary: `${agent.name} uses one agent-scoped vector store. Browser Demo mode simulates retrieval locally; Live API uses OpenAI FileSearchTool.`,
+          source_types: Object.keys(sourceCounts),
+          source_counts: sourceCounts,
+          tools: [
+            {name: "file_search", kind: "OpenAI hosted tool", purpose: "Search only this agent's vector store.", enabled: true},
+            {name: "audio_transcription", kind: "ingest adapter", purpose: "Convert audio into searchable transcript text.", enabled: true},
+            {name: "video_transcription", kind: "ingest adapter", purpose: "Convert supported videos into searchable transcript text.", enabled: true},
+            {name: "image_understanding", kind: "ingest adapter", purpose: "Convert images into searchable notes.", enabled: true},
+            {name: "design_preview", kind: "planning artifact", purpose: "Show FDE the planned agent and tool-calling graph.", enabled: true},
+          ],
+          mermaid: [
+            "flowchart TD",
+            `    FDE[FDE Preview] --> A[Agent: ${agent.name}]`,
+            "    A --> KB[Knowledge Scope: agent_id]",
+            `    KB --> S[Sources: ${sourceLabel}]`,
+            "    S --> V[Validate type / size / SSRF]",
+            "    V --> C{Conversion needed?}",
+            "    C -->|audio| T[Transcribe to text]",
+            "    C -->|video| VT[Transcribe video audio track to text]",
+            "    C -->|image| I[Describe / OCR-style notes]",
+            "    C -->|document/data| U[Upload file or extracted text]",
+            "    T --> U",
+            "    VT --> U",
+            "    I --> U",
+            "    U --> VS[OpenAI Vector Store]",
+            "    Q[User question] --> R[Agent Runtime]",
+            "    R --> FS[FileSearchTool]",
+            "    FS --> VS",
+            "    VS --> R",
+            "    R --> O[Answer constrained to this agent]",
+          ].join("\n"),
+          fde_notes: [],
+        };
+      }
+
+      function sortCreatedDesc(a, b) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || String(b.id).localeCompare(String(a.id));
+      }
+
+      function setStatus(element, message, tone = "") {
+        element.textContent = message;
+        element.className = `status ${tone}`.trim();
+      }
+
+      function selectedAgent() {
+        return state.agents.find((agent) => agent.id === state.selectedAgentId) || null;
+      }
+
+      function renderAgents() {
+        if (!state.agents.length) {
+          els.agentList.innerHTML = `<div class="empty">No agents yet.</div>`;
+          state.selectedAgentId = null;
+          return;
+        }
+
+        if (!state.selectedAgentId || !state.agents.some((agent) => agent.id === state.selectedAgentId)) {
+          state.selectedAgentId = state.agents[0].id;
+        }
+
+        els.agentList.innerHTML = state.agents.map((agent) => `
+          <button class="agent-item ${agent.id === state.selectedAgentId ? "active" : ""}" type="button" data-agent-id="${agent.id}">
+            <span class="agent-name">${escapeHtml(agent.name)}</span>
+            <span class="meta">${agent.id}</span>
+          </button>
+        `).join("");
+
+        for (const button of els.agentList.querySelectorAll("[data-agent-id]")) {
+          button.addEventListener("click", async () => {
+            state.selectedAgentId = button.dataset.agentId;
+            renderAgents();
+            await loadSources();
+          });
+        }
+      }
+
+      function renderSources() {
+        const agent = selectedAgent();
+        if (!agent) {
+          els.sourceList.innerHTML = `<div class="empty">Create an agent first.</div>`;
+          els.answer.textContent = "Select or create an agent.";
+          return;
+        }
+
+        if (!state.sources.length) {
+          els.sourceList.innerHTML = `<div class="empty">No sources for ${escapeHtml(agent.name)}.</div>`;
+          return;
+        }
+
+        els.sourceList.innerHTML = state.sources.map((source) => `
+          <article class="source-item">
+            <div class="source-head">
+              <div>
+                <div class="source-title">${escapeHtml(source.title)}</div>
+                <div class="meta">${source.source_type} · ${formatBytes(source.byte_size)} · ${new Date(source.created_at).toLocaleString()}</div>
+              </div>
+              <span class="badge">${escapeHtml(source.status)}</span>
+            </div>
+            ${source.content_preview ? `<div class="preview">${escapeHtml(source.content_preview)}</div>` : ""}
+            <div class="row">
+              <button class="danger" type="button" data-source-id="${source.id}">Delete</button>
+            </div>
+          </article>
+        `).join("");
+
+        for (const button of els.sourceList.querySelectorAll("[data-source-id]")) {
+          button.addEventListener("click", async () => {
+            await deleteSource(button.dataset.sourceId);
+          });
+        }
+      }
+
+      async function loadAgents() {
+        try {
+          state.agents = await request("/agents");
+          renderAgents();
+          await loadSources();
+        } catch (error) {
+          els.agentList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+        }
+      }
+
+      async function createAgent() {
+        const name = els.agentName.value.trim();
+        if (!name) {
+          return;
+        }
+        const agent = await request("/agents", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({name}),
+        });
+        els.agentName.value = "";
+        state.selectedAgentId = agent.id;
+        await loadAgents();
+      }
+
+      async function loadSources() {
+        const agent = selectedAgent();
+        if (!agent) {
+          state.sources = [];
+          renderSources();
+          return;
+        }
+        try {
+          state.sources = await request(`/agents/${agent.id}/knowledge-sources`);
+          setStatus(els.sourceStatus, `${state.sources.length} source${state.sources.length === 1 ? "" : "s"}`, "ok");
+          renderSources();
+        } catch (error) {
+          setStatus(els.sourceStatus, error.message, "error");
+        }
+      }
+
+      async function uploadFileSource(kind, form) {
+        const agent = selectedAgent();
+        if (!agent) {
+          setStatus(els.sourceStatus, "Create or select an agent first.", "error");
+          return;
+        }
+
+        const formData = new FormData(form);
+        const file = formData.get("file");
+        if (!file || !file.name) {
+          setStatus(els.sourceStatus, "Choose a file.", "error");
+          return;
+        }
+
+        setStatus(els.sourceStatus, "Uploading...");
+        await request(`/agents/${agent.id}/knowledge-sources/${kind}`, {
+          method: "POST",
+          body: formData,
+        });
+        form.reset();
+        setStatus(els.sourceStatus, "Source added.", "ok");
+        await loadSources();
+      }
+
+      async function addUrlSource(form) {
+        const agent = selectedAgent();
+        if (!agent) {
+          setStatus(els.sourceStatus, "Create or select an agent first.", "error");
+          return;
+        }
+        const data = new FormData(form);
+        const url = String(data.get("url") || "").trim();
+        const title = String(data.get("title") || "").trim();
+        if (!url) {
+          setStatus(els.sourceStatus, "Enter an HTTPS URL.", "error");
+          return;
+        }
+
+        setStatus(els.sourceStatus, "Adding URL...");
+        await request(`/agents/${agent.id}/knowledge-sources/url`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({url, title: title || null}),
+        });
+        form.reset();
+        setStatus(els.sourceStatus, "URL added.", "ok");
+        await loadSources();
+      }
+
+      async function deleteSource(sourceId) {
+        const agent = selectedAgent();
+        if (!agent) {
+          return;
+        }
+        setStatus(els.sourceStatus, "Deleting...");
+        await request(`/agents/${agent.id}/knowledge-sources/${sourceId}`, {method: "DELETE"});
+        setStatus(els.sourceStatus, "Source deleted.", "ok");
+        await loadSources();
+      }
+
+      async function runAgent() {
+        const agent = selectedAgent();
+        if (!agent) {
+          setStatus(els.chatStatus, "Create or select an agent first.", "error");
+          return;
+        }
+        const message = els.message.value.trim();
+        if (!message) {
+          setStatus(els.chatStatus, "Enter a message.", "error");
+          return;
+        }
+
+        setStatus(els.chatStatus, "Running...");
+        els.answer.textContent = "";
+        try {
+          const result = await request(`/agents/${agent.id}/run`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({message}),
+          });
+          els.answer.textContent = result.answer;
+          setStatus(els.chatStatus, "Done.", "ok");
+        } catch (error) {
+          setStatus(els.chatStatus, error.message, "error");
+          els.answer.textContent = "The run did not complete.";
+        }
+      }
+
+      async function previewDesign() {
+        const agent = selectedAgent();
+        if (!agent) {
+          setStatus(els.chatStatus, "Create or select an agent first.", "error");
+          return;
+        }
+        setStatus(els.chatStatus, "Building preview...");
+        try {
+          const preview = await request(`/agents/${agent.id}/design-preview`);
+          els.previewSummary.textContent = preview.summary;
+          els.designGraph.textContent = preview.mermaid;
+          els.toolList.innerHTML = preview.tools.map((tool) => `
+            <div class="tool-item">
+              <div class="source-title">${escapeHtml(tool.name)}</div>
+              <div class="meta">${escapeHtml(tool.kind)} · ${escapeHtml(tool.purpose)}</div>
+            </div>
+          `).join("");
+          setStatus(els.chatStatus, "Preview ready.", "ok");
+        } catch (error) {
+          setStatus(els.chatStatus, error.message, "error");
+        }
+      }
+
+      function activateTab(tabName) {
+        for (const tab of document.querySelectorAll("#rag-demo-app .tab")) {
+          tab.classList.toggle("active", tab.dataset.tab === tabName);
+        }
+        for (const form of document.querySelectorAll("#rag-demo-app [data-form]")) {
+          form.classList.toggle("hidden", form.dataset.form !== tabName);
+        }
+      }
+
+      function formatBytes(bytes) {
+        if (bytes === null || bytes === undefined) {
+          return "unknown size";
+        }
+        if (bytes < 1024) {
+          return `${bytes} B`;
+        }
+        if (bytes < 1024 * 1024) {
+          return `${(bytes / 1024).toFixed(1)} KB`;
+        }
+        return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      $("create-agent").addEventListener("click", () => createAgent().catch((error) => setStatus(els.sourceStatus, error.message, "error")));
+      $("refresh-agents").addEventListener("click", loadAgents);
+      $("refresh-sources").addEventListener("click", loadSources);
+      $("run-agent").addEventListener("click", runAgent);
+      $("preview-design").addEventListener("click", previewDesign);
+      els.token.addEventListener("change", loadAgents);
+      els.demoMode.addEventListener("change", loadAgents);
+
+      for (const tab of document.querySelectorAll("#rag-demo-app .tab")) {
+        tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+      }
+
+      $("markdown-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        uploadFileSource("markdown", event.currentTarget).catch((error) => setStatus(els.sourceStatus, error.message, "error"));
+      });
+      $("pdf-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        uploadFileSource("pdf", event.currentTarget).catch((error) => setStatus(els.sourceStatus, error.message, "error"));
+      });
+      $("files-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        uploadFileSource("files", event.currentTarget).catch((error) => setStatus(els.sourceStatus, error.message, "error"));
+      });
+      $("url-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        addUrlSource(event.currentTarget).catch((error) => setStatus(els.sourceStatus, error.message, "error"));
+      });
+
+      loadAgents();
+    })();
+  </script>
+</div>
