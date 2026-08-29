@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload",
+    "migrate": "python -m app.migrate",
+    "test": "pytest"
+  }
+}

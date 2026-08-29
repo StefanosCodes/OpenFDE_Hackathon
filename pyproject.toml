@@ -1,0 +1,32 @@
+[project]
+name = "openfde-rag-kb"
+version = "0.1.0"
+description = "Agent-scoped RAG knowledge base backend for OpenFDE"
+requires-python = ">=3.9"
+dependencies = [
+    "asyncpg>=0.30.0",
+    "eval_type_backport>=0.2.2",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "openai-agents>=0.3.0",
+    "openai>=1.100.0",
+    "python-multipart>=0.0.20",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
