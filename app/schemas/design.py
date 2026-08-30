@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.codebase import CodebaseEvidencePacket
+
 
 class DesignChatMessage(BaseModel):
     role: Literal["user", "assistant"]
@@ -23,6 +25,7 @@ class DesignChatResponse(BaseModel):
     readiness_score: int = Field(ge=0, le=100)
     missing_information: list[str]
     can_generate_design: bool
+    codebase_evidence: CodebaseEvidencePacket | None = None
 
 
 class CanvasNodeData(BaseModel):

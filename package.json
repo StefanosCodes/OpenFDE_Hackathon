@@ -1,7 +1,10 @@
 {
   "scripts": {
-    "dev": "uvicorn app.main:app --reload",
+    "dev": "uvicorn app.main:app --reload --port 8001",
     "migrate": "python -m app.migrate",
     "test": "pytest"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "^0.151.0"
   }
 }

@@ -10,8 +10,10 @@ Agent-scoped RAG knowledge base backend slice for the OpenFDE hackathon scaffold
 - Agent runs use `FileSearchTool` with only that agent's vector store.
 - Agent designs can be previewed before FDE handoff with a structured summary and Mermaid tool-calling graph.
 - PostgreSQL stores metadata only. It does not store embeddings, chunks, or vectors.
-- A read-only GitHub App connector lets each OpenFDE user install the shared app,
-  choose an exposed repository, and make that repository available to the future runner.
+- A read-only GitHub App connector lets each OpenFDE user install the shared app
+  and choose an exposed repository.
+- The Design Agent can call a read-only Codex runner when a request requires facts
+  from that selected repository, then answer from a verified evidence packet.
 
 ## Not In This Slice
 
@@ -49,6 +51,27 @@ The frontend defaults to `http://localhost:8001`; deployments can set
 Disconnecting in OpenFDE removes the OpenFDE connection. It intentionally does not
 uninstall the GitHub App from the GitHub account or organization.
 
+## Read-only Codex runner
+
+When GitHub is enabled for a design chat and the current user has selected a
+repository, the Design Agent receives an `inspect_codebase` tool. The model calls
+it only when a request depends on actual code, architecture, APIs, or behavior.
+
+For each inspection, OpenFDE:
+
+1. Requests a short-lived GitHub App token scoped to the selected repository with
+   read-only contents permission.
+2. Makes a shallow clone in an operating-system temporary directory.
+3. Runs the server-side Codex SDK in a read-only sandbox with network and web
+   access disabled and approvals set to `never`.
+4. Verifies that the checkout stayed clean and validates cited file paths and line
+   ranges.
+5. Deletes the temporary clone and returns a structured evidence packet to the
+   Design Agent.
+
+The flow does not edit code, commit, push, or create pull requests. Repository
+contents and access tokens are not persisted by the runner.
+
 ## Setup
 
 Create a virtual environment and install dependencies:
@@ -57,16 +80,40 @@ Create a virtual environment and install dependencies:
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev]"
+npm install
+cd FrontEnd && npm install && cd ..
 ```
 
 If the local pip is old and does not support editable pyproject installs, use `pip install ".[dev]"`.
 
-Set environment:
+Create an ignored `.env` in the repository root:
+
+```dotenv
+DATABASE_URL=postgresql://openfde_local:YOUR_LOCAL_PASSWORD@127.0.0.1:5432/openfde
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+CODEX_MODEL=gpt-5.6-terra
+CODEX_REASONING_EFFORT=medium
+CODEX_RUNNER_TIMEOUT_SECONDS=120
+CODEX_CLONE_TIMEOUT_SECONDS=60
+CODEX_MAX_REPOSITORY_BYTES=250000000
+```
+
+`.env` is ignored by git. Do not commit or send API keys in source control.
+
+### Local PostgreSQL on macOS
+
+Install and start PostgreSQL 16 with Homebrew:
 
 ```bash
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/openfde"
-export OPENAI_API_KEY="..."
+brew install postgresql@16
+brew services start postgresql@16
 ```
+
+Create a dedicated local role and database, then place its connection URL in
+`.env`. Use a unique password and keep PostgreSQL bound to localhost. This machine
+is configured with database `openfde`, role `openfde_local`, peer authentication
+for local sockets, and SCRAM authentication on `127.0.0.1`/`::1`.
 
 Run migrations:
 
@@ -80,7 +127,8 @@ Start the API:
 npm run dev
 ```
 
-The API is mounted under `/v1`. A small browser demo is available at `http://localhost:8000/demo`.
+The API is mounted under `/v1` at `http://localhost:8001`. A small browser demo is
+available at `http://localhost:8001/demo`.
 
 For a UI-only demo that does not require PostgreSQL or an OpenAI key, serve the static demo page directly:
 
@@ -118,7 +166,7 @@ These map to the seeded users created by `migrations/001_agents_and_knowledge_so
 Create an agent:
 
 ```bash
-curl -s http://localhost:8000/v1/agents \
+curl -s http://localhost:8001/v1/agents \
   -H "Authorization: Bearer user-a" \
   -H "Content-Type: application/json" \
   -d '{"name":"Ray KB"}'
@@ -127,7 +175,7 @@ curl -s http://localhost:8000/v1/agents \
 Upload Markdown:
 
 ```bash
-curl -s http://localhost:8000/v1/agents/$AGENT_ID/knowledge-sources/markdown \
+curl -s http://localhost:8001/v1/agents/$AGENT_ID/knowledge-sources/markdown \
   -H "Authorization: Bearer user-a" \
   -F "file=@notes.md;type=text/markdown"
 ```
@@ -135,7 +183,7 @@ curl -s http://localhost:8000/v1/agents/$AGENT_ID/knowledge-sources/markdown \
 Upload a common file:
 
 ```bash
-curl -s http://localhost:8000/v1/agents/$AGENT_ID/knowledge-sources/files \
+curl -s http://localhost:8001/v1/agents/$AGENT_ID/knowledge-sources/files \
   -H "Authorization: Bearer user-a" \
   -F "file=@deck.pptx"
 ```
@@ -143,7 +191,7 @@ curl -s http://localhost:8000/v1/agents/$AGENT_ID/knowledge-sources/files \
 Preview a draft agent design before creating it:
 
 ```bash
-curl -s http://localhost:8000/v1/agents/design-preview \
+curl -s http://localhost:8001/v1/agents/design-preview \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Due Diligence Agent",
@@ -156,14 +204,14 @@ curl -s http://localhost:8000/v1/agents/design-preview \
 Preview an existing agent design and tool-calling graph:
 
 ```bash
-curl -s http://localhost:8000/v1/agents/$AGENT_ID/design-preview \
+curl -s http://localhost:8001/v1/agents/$AGENT_ID/design-preview \
   -H "Authorization: Bearer user-a"
 ```
 
 Run the agent:
 
 ```bash
-curl -s http://localhost:8000/v1/agents/$AGENT_ID/run \
+curl -s http://localhost:8001/v1/agents/$AGENT_ID/run \
   -H "Authorization: Bearer user-a" \
   -H "Content-Type: application/json" \
   -d '{"message":"What does the knowledge base say about the unique phrase?"}'
@@ -175,4 +223,8 @@ curl -s http://localhost:8000/v1/agents/$AGENT_ID/run \
 pytest
 ```
 
-The tests cover Markdown ingest, generic file ingest, audio/image text conversion paths, expanded structured/web file types, design preview graph generation, owner isolation, bad file type handling, URL SSRF validation, PDF validation, deletion cleanup, and OpenAPI route presence.
+The tests cover Markdown ingest, generic file ingest, audio/image text conversion
+paths, expanded structured/web file types, design preview graph generation, owner
+isolation, bad file type handling, URL SSRF validation, PDF validation, deletion
+cleanup, GitHub connector behavior, Codex tool routing, temporary-clone cleanup,
+and evidence citation verification.
