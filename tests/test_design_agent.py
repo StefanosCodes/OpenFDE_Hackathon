@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +9,7 @@ from app.schemas.design import (
     DesignChatMessage,
     DesignChatRequest,
 )
+from app.schemas.codebase import CodebaseEvidencePacket
 from app.services import design_agent
 
 
@@ -237,3 +239,85 @@ async def test_design_artifact_creates_sequential_edges_when_model_omits_edges(m
     ]
     assert response.knowledge_sources[0].title == "Knowledge base"
     assert response.intents[0].required_tools == ["file_search"]
+
+
+@pytest.mark.anyio
+async def test_design_chat_uses_codebase_tool_and_returns_evidence(monkeypatch):
+    evidence = CodebaseEvidencePacket(
+        repository="openfde/example",
+        commit_sha="a" * 40,
+        summary="The API endpoint is implemented in app/api.py.",
+        findings=["The endpoint returns a health status."],
+        references=[
+            {
+                "path": "app/api.py",
+                "start_line": 10,
+                "end_line": 14,
+                "relevance": "Defines the health endpoint.",
+            }
+        ],
+        files_inspected=["app/api.py"],
+        limitations=[],
+        generated_at=datetime.now(timezone.utc),
+    )
+    tool_call = SimpleNamespace(
+        type="function_call",
+        name="inspect_codebase",
+        arguments=json.dumps({"question": "Where is the health endpoint?"}),
+        call_id="call-codebase",
+    )
+    responses = [
+        SimpleNamespace(id="response-1", output=[tool_call], output_text=""),
+        SimpleNamespace(
+            id="response-2",
+            output=[],
+            output_text=json.dumps(
+                {
+                    "assistant_message": "The repository confirms the health endpoint is in app/api.py.",
+                    "suggested_agent_name": "Health Agent",
+                    "readiness_score": 70,
+                    "missing_information": [],
+                    "can_generate_design": True,
+                }
+            ),
+        ),
+    ]
+    requests = []
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            requests.append(kwargs)
+            return responses.pop(0)
+
+    fake_client = SimpleNamespace(responses=FakeResponses())
+    monkeypatch.setattr(
+        design_agent,
+        "settings",
+        SimpleNamespace(openai_api_key="test-key", openai_model="gpt-4.1-mini"),
+    )
+    monkeypatch.setattr(design_agent, "AsyncOpenAI", lambda **_kwargs: fake_client)
+    inspected_questions = []
+
+    async def inspect(question: str):
+        inspected_questions.append(question)
+        return evidence
+
+    response = await design_agent.design_chat(
+        DesignChatRequest(
+            messages=[
+                DesignChatMessage(
+                    role="user",
+                    content="Where is the health endpoint in our connected repository?",
+                )
+            ],
+            enabled_connector_ids=["github"],
+        ),
+        inspect_codebase=inspect,
+    )
+
+    assert inspected_questions == ["Where is the health endpoint?"]
+    assert requests[0]["tools"][0]["name"] == "inspect_codebase"
+    assert "MUST call" in requests[0]["input"][0]["content"]
+    assert requests[1]["previous_response_id"] == "response-1"
+    assert response.codebase_evidence == evidence
+    assert "app/api.py" in response.assistant_message

@@ -5,7 +5,9 @@ import type {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ??
-  "http://127.0.0.1:8000/v1";
+  "http://localhost:8001/v1";
+
+const AUTH_TOKEN = import.meta.env.VITE_DEMO_AUTH_TOKEN ?? "user-a";
 
 type RequestMessage = Pick<ChatMessage, "role" | "content">;
 
@@ -15,6 +17,25 @@ export type DesignChatResult = {
   readiness_score: number;
   missing_information: string[];
   can_generate_design: boolean;
+  codebase_evidence: CodebaseEvidencePacket | null;
+};
+
+export type CodebaseEvidenceReference = {
+  path: string;
+  start_line: number;
+  end_line: number;
+  relevance: string;
+};
+
+export type CodebaseEvidencePacket = {
+  repository: string;
+  commit_sha: string;
+  summary: string;
+  findings: string[];
+  references: CodebaseEvidenceReference[];
+  files_inspected: string[];
+  limitations: string[];
+  generated_at: string;
 };
 
 export type DesignArtifactResult = {
@@ -49,7 +70,10 @@ export async function requestDesignArtifact(body: {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${AUTH_TOKEN}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(body),
   });
 

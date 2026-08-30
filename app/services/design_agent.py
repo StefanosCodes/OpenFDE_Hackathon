@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import HTTPException, status
 from openai import AsyncOpenAI
 
 from app.core.settings import settings
+from app.schemas.codebase import CodebaseEvidencePacket
 from app.schemas.design import (
     CanvasDocument,
     CanvasEdge,
@@ -150,19 +152,64 @@ CANVAS_START_X = 80
 CANVAS_CENTER_Y = 210
 MAX_LABEL_CHARS = 36
 MAX_DESCRIPTION_CHARS = 72
+InspectCodebase = Callable[[str], Awaitable[CodebaseEvidencePacket]]
+
+INSPECT_CODEBASE_TOOL = {
+    "type": "function",
+    "name": "inspect_codebase",
+    "description": (
+        "Inspect the user's connected GitHub repository when their request depends on "
+        "the repository's actual code, architecture, implementation, APIs, or behavior. "
+        "Do not call this for general discovery questions that do not require code evidence."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "The focused codebase question to verify with repository evidence.",
+            }
+        },
+        "required": ["question"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+CODEBASE_TOOL_POLICY = """
+Codebase grounding policy: the user has enabled a connected GitHub repository.
+If their request asks about that repository's code, implementation, architecture,
+APIs, data flow, dependencies, configuration, or current behavior, you MUST call
+inspect_codebase before answering. Never answer repository-specific facts from the
+conversation alone. Do not call the tool for general workflow discovery or product
+design questions that do not depend on the current codebase.
+""".strip()
 
 
-async def design_chat(request: DesignChatRequest) -> DesignChatResponse:
+async def design_chat(
+    request: DesignChatRequest,
+    *,
+    inspect_codebase: InspectCodebase | None = None,
+) -> DesignChatResponse:
     payload = {
         "agent_name": request.agent_name,
         "enabled_connector_ids": request.enabled_connector_ids,
         "skill_id": request.skill_id,
         "messages": [message.model_dump() for message in request.messages],
     }
-    data = await _call_json_model(
-        developer_prompt=f"{DESIGN_AGENT_PERSONALITY}\n\n{CHAT_ANALYSIS_PROMPT}",
-        payload=payload,
-        fallback=_fallback_chat_payload(request),
+    data = dict(
+        await _call_json_model(
+            developer_prompt=f"{DESIGN_AGENT_PERSONALITY}\n\n{CHAT_ANALYSIS_PROMPT}",
+            payload=payload,
+            fallback=_fallback_chat_payload(request),
+            inspect_codebase=inspect_codebase,
+        )
+    )
+    evidence_value = data.pop("_codebase_evidence", None)
+    evidence = (
+        CodebaseEvidencePacket.model_validate(evidence_value)
+        if evidence_value is not None
+        else None
     )
     return DesignChatResponse(
         assistant_message=str(data.get("assistant_message") or _fallback_chat_payload(request)["assistant_message"]),
@@ -170,6 +217,7 @@ async def design_chat(request: DesignChatRequest) -> DesignChatResponse:
         readiness_score=_clamp_int(data.get("readiness_score"), 0, 100),
         missing_information=_string_list(data.get("missing_information")),
         can_generate_design=bool(data.get("can_generate_design", False)),
+        codebase_evidence=evidence,
     )
 
 
@@ -212,25 +260,80 @@ async def _call_json_model(
     developer_prompt: str,
     payload: dict[str, Any],
     fallback: dict[str, Any],
+    inspect_codebase: InspectCodebase | None = None,
 ) -> dict[str, Any]:
     if not settings.openai_api_key:
         return fallback
 
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     try:
-        response = await client.responses.create(
-            model=settings.openai_model,
-            input=[
-                {"role": "developer", "content": developer_prompt},
+        request: dict[str, Any] = {
+            "model": settings.openai_model,
+            "input": [
+                {
+                    "role": "developer",
+                    "content": (
+                        f"{developer_prompt}\n\n{CODEBASE_TOOL_POLICY}"
+                        if inspect_codebase is not None
+                        else developer_prompt
+                    ),
+                },
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
-        )
+        }
+        if inspect_codebase is not None:
+            request["tools"] = [INSPECT_CODEBASE_TOOL]
+        response = await client.responses.create(**request)
+        evidence = None
+        if inspect_codebase is not None:
+            tool_call = next(
+                (
+                    item
+                    for item in response.output
+                    if getattr(item, "type", None) == "function_call"
+                    and getattr(item, "name", None) == "inspect_codebase"
+                ),
+                None,
+            )
+            if tool_call is not None:
+                try:
+                    arguments = json.loads(str(tool_call.arguments))
+                    question = str(arguments.get("question") or "").strip()
+                except (json.JSONDecodeError, AttributeError, TypeError):
+                    question = ""
+                try:
+                    evidence = await inspect_codebase(question)
+                    tool_output = {
+                        "status": "ok",
+                        "evidence": evidence.model_dump(mode="json"),
+                    }
+                except Exception:
+                    tool_output = {
+                        "status": "unavailable",
+                        "message": (
+                            "Repository inspection was unavailable. Do not claim codebase facts; "
+                            "tell the user that GitHub context could not be verified."
+                        ),
+                    }
+                response = await client.responses.create(
+                    model=settings.openai_model,
+                    previous_response_id=response.id,
+                    input=[
+                        {
+                            "type": "function_call_output",
+                            "call_id": tool_call.call_id,
+                            "output": json.dumps(tool_output, ensure_ascii=False),
+                        }
+                    ],
+                )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Design model call failed",
         ) from exc
     parsed = _parse_json(response.output_text)
+    if parsed is not None and evidence is not None:
+        parsed["_codebase_evidence"] = evidence.model_dump(mode="json")
     return parsed or fallback
 
 

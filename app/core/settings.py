@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+# General local development settings, including the server-side OpenAI API key.
+# Existing process variables always win so deployment configuration remains
+# authoritative.
+load_dotenv(PROJECT_ROOT / ".env", override=False)
+
 # GitHub App credentials have their own hidden file. Existing process variables
 # always win, which keeps deployment configuration authoritative.
 load_dotenv(PROJECT_ROOT / ".env.github-app", override=False)
@@ -20,6 +25,16 @@ def _as_bool(value: str | None, *, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _as_positive_int(value: str | None, *, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = os.getenv(
@@ -29,6 +44,17 @@ class Settings:
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
     openai_transcription_model: str = os.getenv("OPENAI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+    codex_model: str = os.getenv("CODEX_MODEL", "gpt-5.6-terra")
+    codex_reasoning_effort: str = os.getenv("CODEX_REASONING_EFFORT", "medium")
+    codex_runner_timeout_seconds: int = _as_positive_int(
+        os.getenv("CODEX_RUNNER_TIMEOUT_SECONDS"), default=120
+    )
+    codex_clone_timeout_seconds: int = _as_positive_int(
+        os.getenv("CODEX_CLONE_TIMEOUT_SECONDS"), default=60
+    )
+    codex_max_repository_bytes: int = _as_positive_int(
+        os.getenv("CODEX_MAX_REPOSITORY_BYTES"), default=250_000_000
+    )
     cors_origins: tuple[str, ...] = tuple(
         origin.strip()
         for origin in os.getenv(

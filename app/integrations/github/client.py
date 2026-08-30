@@ -103,13 +103,16 @@ class GitHubClient:
     async def verify_repository_access(
         self, *, installation_id: int, repository: GitHubRepository
     ) -> None:
-        token = await self._installation_token(
+        token = await self.create_repository_token(
             installation_id=installation_id,
             repository_id=repository.id,
         )
         await self._api_get(f"/repos/{repository.full_name}", token=token)
 
-    async def _installation_token(self, *, installation_id: int, repository_id: int) -> str:
+    async def create_repository_token(
+        self, *, installation_id: int, repository_id: int
+    ) -> str:
+        """Issue a short-lived token scoped to one repository's read-only contents."""
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
                 f"{self.api_base}/app/installations/{installation_id}/access_tokens",
